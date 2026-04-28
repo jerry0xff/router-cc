@@ -34,6 +34,8 @@ pub struct ProxyState {
     pub start_time: Arc<RwLock<Option<std::time::Instant>>>,
     /// 每个应用类型当前使用的 provider (app_type -> (provider_id, provider_name))
     pub current_providers: Arc<RwLock<std::collections::HashMap<String, (String, String)>>>,
+    /// 每个应用类型最近一次智能路由决策原因 (app_type -> reason)
+    pub routing_reasons: Arc<RwLock<std::collections::HashMap<String, String>>>,
     /// 共享的 ProviderRouter（持有熔断器状态，跨请求保持）
     pub provider_router: Arc<ProviderRouter>,
     /// Gemini Native shadow state，用于 thoughtSignature / tool call 回放
@@ -70,6 +72,7 @@ impl ProxyServer {
             status: Arc::new(RwLock::new(ProxyStatus::default())),
             start_time: Arc::new(RwLock::new(None)),
             current_providers: Arc::new(RwLock::new(std::collections::HashMap::new())),
+            routing_reasons: Arc::new(RwLock::new(std::collections::HashMap::new())),
             provider_router,
             gemini_shadow: Arc::new(GeminiShadowStore::default()),
             app_handle,
@@ -253,12 +256,14 @@ impl ProxyServer {
 
         // 从 current_providers HashMap 获取每个应用类型当前正在使用的 provider
         let current_providers = self.state.current_providers.read().await;
+        let routing_reasons = self.state.routing_reasons.read().await;
         status.active_targets = current_providers
             .iter()
             .map(|(app_type, (provider_id, provider_name))| ActiveTarget {
                 app_type: app_type.clone(),
                 provider_id: provider_id.clone(),
                 provider_name: provider_name.clone(),
+                routing_reason: routing_reasons.get(app_type).cloned(),
             })
             .collect();
 

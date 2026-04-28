@@ -47,7 +47,7 @@ pub use mcp::{
     sync_enabled_to_codex, sync_enabled_to_gemini, sync_single_server_to_claude,
     sync_single_server_to_codex, sync_single_server_to_gemini,
 };
-pub use provider::{Provider, ProviderMeta};
+pub use provider::{Provider, ProviderMeta, ProviderRoutingConfig};
 pub use services::{
     skill::{migrate_skills_to_ssot, ImportSkillSelection},
     ConfigService, EndpointLatency, McpService, PromptService, ProviderService, ProxyService,
@@ -1324,6 +1324,9 @@ pub fn run() {
             commands::enter_lightweight_mode,
             commands::exit_lightweight_mode,
             commands::is_lightweight_mode,
+            // Intelligent routing
+            commands::get_intelligent_routing_settings,
+            commands::update_intelligent_routing_settings,
         ]);
 
     let app = builder

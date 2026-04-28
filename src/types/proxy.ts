@@ -33,6 +33,7 @@ export interface ActiveTarget {
   app_type: string;
   provider_name: string;
   provider_id: string;
+  routing_reason?: string;
 }
 
 export interface ProxyServerInfo {

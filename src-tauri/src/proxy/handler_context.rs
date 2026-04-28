@@ -7,6 +7,8 @@ use crate::provider::Provider;
 use crate::proxy::{
     extract_session_id,
     forwarder::RequestForwarder,
+    query_classifier,
+    intelligent_router::RouterDecision,
     server::ProxyState,
     types::{AppProxyConfig, CopilotOptimizerConfig, OptimizerConfig, RectifierConfig},
     ProxyError,
@@ -46,6 +48,9 @@ pub struct RequestContext {
     /// 这里使用本地 settings 的设备级 current provider。
     /// 代理模式下如果实际使用的 provider 与此不一致，会触发切换以确保 UI 始终准确。
     pub current_provider_id: String,
+    /// 智能路由决策结果（`None` 表示未启用或无匹配，回落到默认队列）
+    #[allow(dead_code)]
+    pub routing_decision: Option<RouterDecision>,
     /// 请求中的模型名称
     pub request_model: String,
     /// 日志标签（如 "Claude"、"Codex"、"Gemini"）
@@ -124,11 +129,16 @@ impl RequestContext {
             session_result.client_provided
         );
 
+        // 提取查询文本并分类（用于智能路由）
+        let query_profile = query_classifier::extract_last_user_message(body)
+            .as_deref()
+            .map(query_classifier::classify);
+
         // 使用共享的 ProviderRouter 选择 Provider（熔断器状态跨请求保持）
         // 注意：只在这里调用一次，结果传递给 forwarder，避免重复消耗 HalfOpen 名额
-        let providers = state
+        let (providers, routing_decision) = state
             .provider_router
-            .select_providers(app_type_str)
+            .select_providers(app_type_str, query_profile.as_ref())
             .await
             .map_err(|e| match e {
                 crate::error::AppError::AllProvidersCircuitOpen => {
@@ -142,6 +152,19 @@ impl RequestContext {
             .first()
             .cloned()
             .ok_or(ProxyError::NoAvailableProvider)?;
+
+        // 将智能路由决策原因写入共享状态，供 UI 展示
+        {
+            let mut reasons = state.routing_reasons.write().await;
+            match &routing_decision {
+                Some(decision) => {
+                    reasons.insert(app_type_str.to_string(), decision.reason.clone());
+                }
+                None => {
+                    reasons.remove(app_type_str);
+                }
+            }
+        }
 
         log::debug!(
             "[{}] Provider: {}, model: {}, failover chain: {} providers, session: {}",
@@ -158,6 +181,7 @@ impl RequestContext {
             provider,
             providers,
             current_provider_id,
+            routing_decision,
             request_model,
             tag,
             app_type_str,

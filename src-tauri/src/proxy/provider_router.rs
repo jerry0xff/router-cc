@@ -7,6 +7,8 @@ use crate::database::Database;
 use crate::error::AppError;
 use crate::provider::Provider;
 use crate::proxy::circuit_breaker::{AllowResult, CircuitBreaker, CircuitBreakerConfig};
+use crate::proxy::intelligent_router::{self, IntelligentRoutingSettings, RouterDecision};
+use crate::proxy::query_classifier::QueryProfile;
 use std::collections::HashMap;
 use std::str::FromStr;
 use std::sync::Arc;
@@ -29,12 +31,20 @@ impl ProviderRouter {
         }
     }
 
-    /// 选择可用的供应商（支持故障转移）
+    /// 选择可用的供应商（支持故障转移 + 智能路由）
     ///
-    /// 返回按优先级排序的可用供应商列表：
-    /// - 故障转移关闭时：仅返回当前供应商
-    /// - 故障转移开启时：仅使用故障转移队列，按队列顺序依次尝试（P1 → P2 → ...）
-    pub async fn select_providers(&self, app_type: &str) -> Result<Vec<Provider>, AppError> {
+    /// 当 `query_profile` 有值且智能路由已启用时，优先用智能路由决策：
+    /// - 找到合适 provider → 将其置于列表首位，其余 provider 作为故障转移后备
+    /// - 找不到合适 provider → 回落到原有优先级队列
+    ///
+    /// 返回 `(providers, routing_decision)`：
+    /// - providers：按优先级排序的可用供应商列表
+    /// - routing_decision：智能路由的选择原因（`None` 表示未启用或无匹配）
+    pub async fn select_providers(
+        &self,
+        app_type: &str,
+        query_profile: Option<&QueryProfile>,
+    ) -> Result<(Vec<Provider>, Option<RouterDecision>), AppError> {
         let mut result = Vec::new();
         let mut total_providers = 0usize;
         let mut circuit_open_count = 0usize;
@@ -105,7 +115,38 @@ impl ProviderRouter {
             }
         }
 
-        Ok(result)
+        // ── 智能路由 ───────────────────────────────────────────────────────────
+        // 在已选出的可用 provider 列表上做查询感知排序，不影响熔断器逻辑
+        if let Some(profile) = query_profile {
+            let routing_settings = self.load_routing_settings(app_type);
+            if routing_settings.enabled {
+                if let Some(decision) = intelligent_router::select(profile, &result, &routing_settings) {
+                    // 把智能路由选出的 provider 移到列表首位
+                    if let Some(pos) = result.iter().position(|p| p.id == decision.provider_id) {
+                        let chosen = result.remove(pos);
+                        result.insert(0, chosen);
+                        log::info!(
+                            "[{app_type}] 智能路由: {}",
+                            decision.reason
+                        );
+                        return Ok((result, Some(decision)));
+                    }
+                }
+            }
+        }
+
+        Ok((result, None))
+    }
+
+    /// 从数据库加载智能路由设置（失败时返回默认值）
+    fn load_routing_settings(&self, app_type: &str) -> IntelligentRoutingSettings {
+        let key = format!("intelligent_routing_{app_type}");
+        self.db
+            .get_setting(&key)
+            .ok()
+            .flatten()
+            .and_then(|json| serde_json::from_str(&json).ok())
+            .unwrap_or_default()
     }
 
     /// 请求执行前获取熔断器“放行许可”
@@ -343,7 +384,7 @@ mod tests {
         db.add_to_failover_queue("claude", "b").unwrap();
 
         let router = ProviderRouter::new(db.clone());
-        let providers = router.select_providers("claude").await.unwrap();
+        let (providers, _) = router.select_providers("claude", None).await.unwrap();
 
         assert_eq!(providers.len(), 1);
         assert_eq!(providers[0].id, "a");
@@ -376,7 +417,7 @@ mod tests {
         db.update_proxy_config_for_app(config).await.unwrap();
 
         let router = ProviderRouter::new(db.clone());
-        let providers = router.select_providers("claude").await.unwrap();
+        let (providers, _) = router.select_providers("claude", None).await.unwrap();
 
         assert_eq!(providers.len(), 2);
         // 故障转移开启时：仅按队列顺序选择（忽略当前供应商）
@@ -408,7 +449,7 @@ mod tests {
         db.update_proxy_config_for_app(config).await.unwrap();
 
         let router = ProviderRouter::new(db.clone());
-        let providers = router.select_providers("claude").await.unwrap();
+        let (providers, _) = router.select_providers("claude", None).await.unwrap();
 
         assert_eq!(providers.len(), 1);
         assert_eq!(providers[0].id, "b");
@@ -451,7 +492,7 @@ mod tests {
             .await
             .unwrap();
 
-        let providers = router.select_providers("claude").await.unwrap();
+        let (providers, _) = router.select_providers("claude", None).await.unwrap();
         assert_eq!(providers.len(), 2);
 
         assert!(router.allow_provider_request("b", "claude").await.allowed);

@@ -175,6 +175,8 @@ export interface ProviderMeta {
   providerType?: string;
   // GitHub Copilot 关联账号 ID（旧字段，保留兼容读取）
   githubAccountId?: string;
+  // 智能路由配置（仅存储在 meta，不写入 live 配置）
+  routingConfig?: Record<string, unknown>;
 }
 
 // Skill 同步方式

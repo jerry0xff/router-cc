@@ -9,6 +9,7 @@ import {
   ScrollText,
   HardDriveDownload,
   FlaskConical,
+  Zap,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -44,6 +45,7 @@ import { ModelTestConfigPanel } from "@/components/usage/ModelTestConfigPanel";
 import { UsageDashboard } from "@/components/usage/UsageDashboard";
 import { LogConfigPanel } from "@/components/settings/LogConfigPanel";
 import { AuthCenterPanel } from "@/components/settings/AuthCenterPanel";
+import { IntelligentRoutingPanel } from "@/components/settings/IntelligentRoutingPanel";
 import { useInstalledSkills } from "@/hooks/useSkills";
 import { useSettings } from "@/hooks/useSettings";
 import { useImportExport } from "@/hooks/useImportExport";
@@ -194,13 +196,16 @@ export function SettingsPage({
           onValueChange={setActiveTab}
           className="flex flex-col h-full"
         >
-          <TabsList className="grid w-full grid-cols-6 mb-6 glass rounded-lg">
+          <TabsList className="grid w-full grid-cols-7 mb-6 glass rounded-lg">
             <TabsTrigger value="general">
               {t("settings.tabGeneral")}
             </TabsTrigger>
             <TabsTrigger value="proxy">{t("settings.tabProxy")}</TabsTrigger>
             <TabsTrigger value="auth">
               {t("settings.tabAuth", { defaultValue: "认证" })}
+            </TabsTrigger>
+            <TabsTrigger value="routing">
+              {t("settings.tabRouting", { defaultValue: "智能路由" })}
             </TabsTrigger>
             <TabsTrigger value="advanced">
               {t("settings.tabAdvanced")}
@@ -272,6 +277,27 @@ export function SettingsPage({
                   className="space-y-6"
                 >
                   <AuthCenterPanel />
+                </motion.div>
+              </TabsContent>
+
+              <TabsContent value="routing" className="space-y-6 mt-0 pb-4">
+                <motion.div
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.3 }}
+                  className="space-y-6"
+                >
+                  {(["claude", "codex", "gemini"] as const).map((appType) => (
+                    <div key={appType} className="rounded-xl glass-card overflow-hidden">
+                      <div className="px-6 py-4 border-b border-border/50 flex items-center gap-3">
+                        <Zap className="h-4 w-4 text-yellow-500" />
+                        <h3 className="text-base font-semibold capitalize">{appType}</h3>
+                      </div>
+                      <div className="px-6 py-4">
+                        <IntelligentRoutingPanel appType={appType} />
+                      </div>
+                    </div>
+                  ))}
                 </motion.div>
               </TabsContent>
 

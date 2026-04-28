@@ -97,6 +97,8 @@ pub struct ActiveTarget {
     pub app_type: String, // "Claude" | "Codex" | "Gemini"
     pub provider_name: String,
     pub provider_id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub routing_reason: Option<String>,
 }
 
 /// 代理服务器信息

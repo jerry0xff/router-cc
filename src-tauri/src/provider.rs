@@ -216,6 +216,35 @@ pub struct AuthBinding {
     pub account_id: Option<String>,
 }
 
+/// 供应商路由配置（存储于 meta 字段，无需 schema 变更）
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct ProviderRoutingConfig {
+    /// 是否参与智能路由
+    #[serde(default)]
+    pub enabled: bool,
+    /// 能力标签，如 ["coding", "math", "writing", "translation", "analysis", "general"]
+    #[serde(default)]
+    pub tags: Vec<String>,
+    /// 复杂度覆盖: "simple" | "medium" | "complex" | "all"
+    #[serde(default = "ProviderRoutingConfig::default_complexity")]
+    pub complexity: String,
+    /// 自评质量分 1-5，用于 Avengers 评分
+    #[serde(default = "ProviderRoutingConfig::default_quality")]
+    pub quality_score: u8,
+    /// 每 1k token 综合成本（input+output），用于 Avengers 成本归一化
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cost_per_1k: Option<f64>,
+}
+
+impl ProviderRoutingConfig {
+    fn default_complexity() -> String {
+        "all".to_string()
+    }
+    fn default_quality() -> u8 {
+        3
+    }
+}
+
 /// 供应商元数据
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ProviderMeta {
@@ -288,6 +317,9 @@ pub struct ProviderMeta {
     /// `None` 表示旧数据/未知状态，`Some(false)` 表示明确仅存在于数据库中。
     #[serde(rename = "liveConfigManaged", skip_serializing_if = "Option::is_none")]
     pub live_config_managed: Option<bool>,
+    /// 智能路由配置（不写入 live 配置，仅存于数据库）
+    #[serde(rename = "routingConfig", skip_serializing_if = "Option::is_none")]
+    pub routing_config: Option<ProviderRoutingConfig>,
     /// 供应商类型标识（用于特殊供应商检测）
     /// - "github_copilot": GitHub Copilot 供应商
     #[serde(rename = "providerType", skip_serializing_if = "Option::is_none")]

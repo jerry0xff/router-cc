@@ -91,6 +91,7 @@ import {
 } from "./hooks";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { useSettingsQuery } from "@/lib/query";
+import { RoutingConfigSection, fromMeta, toMeta, type RoutingConfig } from "./RoutingConfigSection";
 import {
   CLAUDE_DEFAULT_CONFIG,
   CODEX_DEFAULT_CONFIG,
@@ -200,6 +201,9 @@ export function ProviderForm({
   const [testConfig, setTestConfig] = useState<ProviderTestConfig>(
     () => initialData?.meta?.testConfig ?? { enabled: false },
   );
+  const [routingConfig, setRoutingConfig] = useState<RoutingConfig>(
+    () => fromMeta(initialData?.meta),
+  );
   const [pricingConfig, setPricingConfig] = useState<{
     enabled: boolean;
     costMultiplier?: string;
@@ -236,6 +240,7 @@ export function ProviderForm({
       supportsFullUrl ? (initialData?.meta?.isFullUrl ?? false) : false,
     );
     setTestConfig(initialData?.meta?.testConfig ?? { enabled: false });
+    setRoutingConfig(fromMeta(initialData?.meta));
     setPricingConfig({
       enabled:
         initialData?.meta?.costMultiplier !== undefined ||
@@ -1208,6 +1213,10 @@ export function ProviderForm({
         supportsFullUrl && category !== "official" && localIsFullUrl
           ? true
           : undefined,
+      routingConfig:
+        (appId === "claude" || appId === "codex" || appId === "gemini")
+          ? toMeta(routingConfig)
+          : undefined,
     };
 
     if (!isCodexOauthProvider && "codexFastMode" in nextMeta) {
@@ -2109,6 +2118,13 @@ export function ProviderForm({
                 onPricingConfigChange={setPricingConfig}
               />
             )}
+
+          {(appId === "claude" || appId === "codex" || appId === "gemini") && (
+            <RoutingConfigSection
+              value={routingConfig}
+              onChange={setRoutingConfig}
+            />
+          )}
 
           {showButtons && (
             <div className="flex justify-end gap-2">

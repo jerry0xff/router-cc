@@ -336,17 +336,25 @@ export function ProxyPanel({
                     {status.active_targets.map((target) => (
                       <div
                         key={target.app_type}
-                        className="flex items-center justify-between rounded-md border border-border bg-background/60 px-2 py-1.5 text-xs"
+                        className="flex flex-col gap-0.5 rounded-md border border-border bg-background/60 px-2 py-1.5 text-xs"
                       >
-                        <span className="text-muted-foreground">
-                          {target.app_type}
-                        </span>
-                        <span
-                          className="ml-2 font-medium truncate text-foreground"
-                          title={target.provider_name}
-                        >
-                          {target.provider_name}
-                        </span>
+                        <div className="flex items-center justify-between">
+                          <span className="text-muted-foreground">
+                            {target.app_type}
+                          </span>
+                          <span
+                            className="ml-2 font-medium truncate text-foreground"
+                            title={target.provider_name}
+                          >
+                            {target.provider_name}
+                          </span>
+                        </div>
+                        {target.routing_reason && (
+                          <p className="text-muted-foreground/70 truncate" title={target.routing_reason}>
+                            <Zap className="inline h-2.5 w-2.5 mr-0.5 text-yellow-500" />
+                            {target.routing_reason}
+                          </p>
+                        )}
                       </div>
                     ))}
                   </div>
