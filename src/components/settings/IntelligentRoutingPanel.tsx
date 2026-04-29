@@ -14,8 +14,8 @@ interface Props {
 }
 
 const DEFAULT_SETTINGS: IntelligentRoutingSettings = {
-  enabled: false,
-  strategy: "rule_match",
+  enabled: true,
+  strategy: "arch_router",
   avengersAlpha: 0.7,
   fallbackToCurrent: true,
   showRoutingReason: true,
@@ -71,7 +71,18 @@ export function IntelligentRoutingPanel({ appType }: Props) {
           <p className="text-sm font-medium">
             {t("routing.strategy", { defaultValue: "路由策略" })}
           </p>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-3 gap-3">
+            <StrategyCard
+              value="arch_router"
+              current={form.strategy}
+              title={t("routing.strategy.archRouter", {
+                defaultValue: "Arch 智能",
+              })}
+              description={t("routing.strategy.archRouterDesc", {
+                defaultValue: "按查询类型自动识别最优 provider，无需配置",
+              })}
+              onSelect={() => set("strategy", "arch_router")}
+            />
             <StrategyCard
               value="rule_match"
               current={form.strategy}
@@ -87,7 +98,7 @@ export function IntelligentRoutingPanel({ appType }: Props) {
               value="avengers"
               current={form.strategy}
               title={t("routing.strategy.avengers", {
-                defaultValue: "Avengers 评分",
+                defaultValue: "Avengers",
               })}
               description={t("routing.strategy.avengersDesc", {
                 defaultValue: "综合性能与成本，α 参数可调",

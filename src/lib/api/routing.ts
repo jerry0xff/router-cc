@@ -2,7 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 
 export interface IntelligentRoutingSettings {
   enabled: boolean;
-  strategy: "rule_match" | "avengers";
+  strategy: "arch_router" | "rule_match" | "avengers";
   avengersAlpha: number;
   fallbackToCurrent: boolean;
   showRoutingReason: boolean;

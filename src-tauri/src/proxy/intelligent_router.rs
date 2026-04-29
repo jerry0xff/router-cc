@@ -42,8 +42,8 @@ fn default_true() -> bool {
 impl Default for IntelligentRoutingSettings {
     fn default() -> Self {
         Self {
-            enabled: false,
-            strategy: RoutingStrategy::default(),
+            enabled: true,
+            strategy: RoutingStrategy::ArchRouter,
             avengers_alpha: 0.7,
             fallback_to_current: true,
             show_routing_reason: true,
@@ -54,8 +54,10 @@ impl Default for IntelligentRoutingSettings {
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum RoutingStrategy {
-    /// 标签规则匹配 + 质量分排序
+    /// Arch-Router：按查询类型自动识别最优 provider，无需手动打标签
     #[default]
+    ArchRouter,
+    /// 标签规则匹配 + 质量分排序
     RuleMatch,
     /// Avengers 综合评分（α·质量 + (1-α)·成本效率）
     Avengers,
@@ -89,7 +91,12 @@ pub fn select(
         return None;
     }
 
-    // 筛选：参与智能路由 + 能力标签匹配 + 复杂度覆盖
+    // ArchRouter 不依赖用户配置的 routing_config 标签，直接匹配
+    if settings.strategy == RoutingStrategy::ArchRouter {
+        return select_arch_router(profile, providers);
+    }
+
+    // rule_match / avengers：筛选出显式配置了路由标签的 providers
     let candidates: Vec<(&Provider, &ProviderRoutingConfig)> = providers
         .iter()
         .filter_map(|p| {
@@ -112,11 +119,116 @@ pub fn select(
     }
 
     match settings.strategy {
+        RoutingStrategy::ArchRouter => unreachable!(),
         RoutingStrategy::RuleMatch => select_rule_match(profile, &candidates),
         RoutingStrategy::Avengers => {
             select_avengers(profile, &candidates, settings.avengers_alpha)
         }
     }
+}
+
+// ── Arch-Router 策略 ─────────────────────────────────────────────────────────
+//
+// 按 (domain, complexity) 查路由表，得到有序的 "provider 类型" 列表，
+// 逐一检查可用 providers 是否匹配（按名称 / baseURL / icon 关键词），
+// 返回第一个命中的 provider。无需用户手动打标签。
+
+/// 从 provider 的 settingsConfig 中提取 baseURL（兼容大小写）
+fn get_base_url(provider: &Provider) -> String {
+    provider
+        .settings_config
+        .get("baseURL")
+        .or_else(|| provider.settings_config.get("baseUrl"))
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_lowercase()
+}
+
+/// 判断 provider 是否属于某个 "provider 类型"
+///
+/// 匹配顺序：name → baseURL → icon，任一包含关键词即命中。
+fn provider_matches_family(provider: &Provider, family: &str) -> bool {
+    let name = provider.name.to_lowercase();
+    let url = get_base_url(provider);
+    let icon = provider.icon.as_deref().unwrap_or("").to_lowercase();
+    let check = |kw: &str| name.contains(kw) || url.contains(kw) || icon.contains(kw);
+
+    match family {
+        // Anthropic — 按档位细分
+        "claude-opus"   => check("opus"),
+        "claude-sonnet" => check("sonnet"),
+        "claude-haiku"  => check("haiku"),
+        "claude"        => check("claude") || check("anthropic"),
+        // DeepSeek
+        "deepseek-r1"   => check("deepseek-r1") || check("deepseek-reasoner") || check("/r1"),
+        "deepseek"      => check("deepseek"),
+        // OpenAI
+        "gpt-o"         => check("o1") || check("o3") || check("o4"),
+        "openai"        => check("openai") || check("gpt"),
+        // Google
+        "gemini-pro"    => check("gemini") && (check("pro") || check("ultra") || check("2.5-pro") || check("3.1-pro")),
+        "gemini"        => check("gemini"),
+        // 其他
+        "groq"          => check("groq"),
+        "mistral"       => check("mistral"),
+        "qwen"          => check("qwen") || check("tongyi") || check("alibaba"),
+        _               => false,
+    }
+}
+
+/// (domain, complexity) → 按优先级排列的 provider 类型列表
+fn arch_route_families(domain: &Domain, complexity: &Complexity) -> &'static [&'static str] {
+    match (domain, complexity) {
+        // coding
+        (Domain::Coding, Complexity::Simple)   => &["deepseek", "claude-haiku", "openai", "gemini", "groq"],
+        (Domain::Coding, Complexity::Medium)   => &["claude-sonnet", "deepseek-r1", "openai", "deepseek", "gemini-pro", "claude"],
+        (Domain::Coding, Complexity::Complex)  => &["claude-opus", "gpt-o", "deepseek-r1", "claude-sonnet", "openai", "deepseek", "claude"],
+        // math
+        (Domain::Math, Complexity::Simple)     => &["deepseek", "openai", "gemini", "groq"],
+        (Domain::Math, Complexity::Medium)     => &["deepseek-r1", "gpt-o", "claude-sonnet", "openai", "deepseek"],
+        (Domain::Math, Complexity::Complex)    => &["deepseek-r1", "gpt-o", "claude-opus", "claude-sonnet", "openai"],
+        // writing
+        (Domain::Writing, Complexity::Simple)  => &["deepseek", "claude-haiku", "openai", "gemini"],
+        (Domain::Writing, Complexity::Medium)  => &["claude-sonnet", "deepseek", "openai", "gemini-pro"],
+        (Domain::Writing, Complexity::Complex) => &["claude-opus", "claude-sonnet", "openai", "deepseek"],
+        // translation
+        (Domain::Translation, Complexity::Simple)  => &["deepseek", "openai", "gemini", "groq"],
+        (Domain::Translation, Complexity::Medium)  => &["deepseek", "claude-haiku", "openai", "qwen"],
+        (Domain::Translation, Complexity::Complex) => &["claude-sonnet", "openai", "deepseek", "qwen"],
+        // analysis
+        (Domain::Analysis, Complexity::Simple)  => &["deepseek", "openai", "gemini"],
+        (Domain::Analysis, Complexity::Medium)  => &["deepseek-r1", "claude-sonnet", "openai", "deepseek"],
+        (Domain::Analysis, Complexity::Complex) => &["deepseek-r1", "claude-opus", "gpt-o", "claude-sonnet", "openai"],
+        // general
+        (Domain::General, Complexity::Simple)   => &["deepseek", "groq", "openai", "gemini"],
+        (Domain::General, Complexity::Medium)   => &["deepseek", "claude-haiku", "openai", "gemini"],
+        (Domain::General, Complexity::Complex)  => &["deepseek", "claude-sonnet", "openai", "gemini-pro"],
+    }
+}
+
+/// Arch-Router：直接在全部可用 provider 上做类型匹配，无需手动配置路由标签
+fn select_arch_router(
+    profile: &QueryProfile,
+    providers: &[Provider],
+) -> Option<RouterDecision> {
+    let families = arch_route_families(&profile.domain, &profile.complexity);
+
+    for family in families {
+        if let Some(provider) = providers.iter().find(|p| provider_matches_family(p, family)) {
+            return Some(RouterDecision {
+                provider_id: provider.id.clone(),
+                provider_name: provider.name.clone(),
+                reason: format!(
+                    "{} · {} → {}",
+                    profile.domain, profile.complexity, provider.name
+                ),
+                domain: profile.domain.to_string(),
+                complexity: profile.complexity.to_string(),
+                strategy: "arch_router".to_string(),
+            });
+        }
+    }
+    None
 }
 
 // ── 规则匹配策略 ─────────────────────────────────────────────────────────────
