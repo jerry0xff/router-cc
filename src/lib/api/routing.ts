@@ -6,6 +6,8 @@ export interface IntelligentRoutingSettings {
   avengersAlpha: number;
   fallbackToCurrent: boolean;
   showRoutingReason: boolean;
+  /** 外部 Arch-Router 服务端点，如 "http://localhost:8000"。留空使用内置关键词分类器 */
+  archRouterEndpoint?: string;
 }
 
 export const routingApi = {

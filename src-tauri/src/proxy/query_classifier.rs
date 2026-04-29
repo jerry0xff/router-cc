@@ -212,6 +212,66 @@ pub fn classify(text: &str) -> QueryProfile {
     QueryProfile { domain, complexity }
 }
 
+/// 调用外部 Arch-Router 服务对请求体进行分类
+///
+/// `endpoint` 格式：`http://localhost:8000`（不含路径），函数会补充 `/v1/classify`。
+/// 失败时返回 `None`，调用方应回落到内置关键词分类器。
+pub async fn classify_remote(
+    body: &serde_json::Value,
+    endpoint: &str,
+) -> Option<QueryProfile> {
+    // 从请求体提取 messages 数组
+    let messages = body.get("messages")?.as_array()?;
+    if messages.is_empty() {
+        return None;
+    }
+
+    let url = format!("{}/v1/classify", endpoint.trim_end_matches('/'));
+
+    let payload = serde_json::json!({ "messages": messages });
+
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(3))
+        .build()
+        .ok()?;
+
+    let resp = client
+        .post(&url)
+        .json(&payload)
+        .send()
+        .await
+        .ok()?;
+
+    if !resp.status().is_success() {
+        log::debug!("[Classifier] remote endpoint returned {}", resp.status());
+        return None;
+    }
+
+    #[derive(serde::Deserialize)]
+    struct RemoteResult {
+        domain: String,
+        complexity: String,
+    }
+
+    let result: RemoteResult = resp.json().await.ok()?;
+
+    let domain = match result.domain.as_str() {
+        "coding"      => Domain::Coding,
+        "math"        => Domain::Math,
+        "writing"     => Domain::Writing,
+        "translation" => Domain::Translation,
+        "analysis"    => Domain::Analysis,
+        _             => Domain::General,
+    };
+    let complexity = match result.complexity.as_str() {
+        "simple"  => Complexity::Simple,
+        "complex" => Complexity::Complex,
+        _         => Complexity::Medium,
+    };
+
+    Some(QueryProfile { domain, complexity })
+}
+
 fn count_matches(text: &str, keywords: &[&str]) -> usize {
     keywords
         .iter()

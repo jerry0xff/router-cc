@@ -19,6 +19,7 @@ const DEFAULT_SETTINGS: IntelligentRoutingSettings = {
   avengersAlpha: 0.7,
   fallbackToCurrent: true,
   showRoutingReason: true,
+  archRouterEndpoint: "",
 };
 
 export function IntelligentRoutingPanel({ appType }: Props) {
@@ -107,6 +108,30 @@ export function IntelligentRoutingPanel({ appType }: Props) {
             />
           </div>
         </div>
+
+        {/* Arch-Router 外部端点 */}
+        {form.strategy === "arch_router" && (
+          <div className="rounded-xl border border-border bg-card/50 p-4 space-y-2">
+            <p className="text-sm font-medium">
+              {t("routing.archRouterEndpoint", {
+                defaultValue: "Arch-Router 服务端点（可选）",
+              })}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              {t("routing.archRouterEndpointDesc", {
+                defaultValue:
+                  "填入本地或远程 Router 服务地址（如 http://localhost:8000），留空则使用内置关键词分类器",
+              })}
+            </p>
+            <input
+              type="url"
+              placeholder="http://localhost:8000"
+              value={form.archRouterEndpoint ?? ""}
+              onChange={(e) => set("archRouterEndpoint", e.target.value)}
+              className="w-full rounded-md border border-border bg-background px-3 py-1.5 text-sm font-mono placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-primary"
+            />
+          </div>
+        )}
 
         {/* Avengers α 参数 */}
         {form.strategy === "avengers" && (

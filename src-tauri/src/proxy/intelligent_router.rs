@@ -30,6 +30,9 @@ pub struct IntelligentRoutingSettings {
     /// 是否在代理面板显示路由原因
     #[serde(default = "default_true")]
     pub show_routing_reason: bool,
+    /// 外部 Arch-Router 服务端点（如 "http://localhost:8000"），留空则使用内置关键词分类器
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub arch_router_endpoint: Option<String>,
 }
 
 fn default_alpha() -> f64 {
@@ -47,6 +50,7 @@ impl Default for IntelligentRoutingSettings {
             avengers_alpha: 0.7,
             fallback_to_current: true,
             show_routing_reason: true,
+            arch_router_endpoint: None,
         }
     }
 }

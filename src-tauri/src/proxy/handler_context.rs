@@ -130,10 +130,47 @@ impl RequestContext {
             session_result.client_provided
         );
 
+        // 加载路由设置（用于读取 arch_router_endpoint）
+        let routing_settings: crate::proxy::intelligent_router::IntelligentRoutingSettings = {
+            let key = format!("intelligent_routing_{app_type_str}");
+            state
+                .db
+                .get_setting(&key)
+                .ok()
+                .flatten()
+                .and_then(|json| serde_json::from_str(&json).ok())
+                .unwrap_or_default()
+        };
+
         // 提取查询文本并分类（用于智能路由）
-        let query_profile = query_classifier::extract_last_user_message(body)
-            .as_deref()
-            .map(query_classifier::classify);
+        // 若配置了外部 Arch-Router 端点，优先调用（超时 3s，失败自动回落）
+        let query_profile = if routing_settings.enabled {
+            if let Some(endpoint) = routing_settings
+                .arch_router_endpoint
+                .as_deref()
+                .filter(|e| !e.is_empty())
+            {
+                let remote =
+                    query_classifier::classify_remote(body, endpoint).await;
+                if remote.is_none() {
+                    log::debug!(
+                        "[{}] Remote classifier unavailable, falling back to keyword classifier",
+                        tag
+                    );
+                }
+                remote.or_else(|| {
+                    query_classifier::extract_last_user_message(body)
+                        .as_deref()
+                        .map(query_classifier::classify)
+                })
+            } else {
+                query_classifier::extract_last_user_message(body)
+                    .as_deref()
+                    .map(query_classifier::classify)
+            }
+        } else {
+            None
+        };
 
         // 使用共享的 ProviderRouter 选择 Provider（熔断器状态跨请求保持）
         // 注意：只在这里调用一次，结果传递给 forwarder，避免重复消耗 HalfOpen 名额
