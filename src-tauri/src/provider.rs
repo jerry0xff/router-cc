@@ -216,33 +216,50 @@ pub struct AuthBinding {
     pub account_id: Option<String>,
 }
 
+/// 单个模型的路由标签（domain × complexity 交叉点）
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ModelLabel {
+    /// "coding" | "math" | "writing" | "translation" | "analysis" | "general"
+    pub domain: String,
+    /// "simple" | "medium" | "complex"
+    pub complexity: String,
+}
+
+/// 单个模型的路由配置
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ModelRoutingConfig {
+    /// 模型 ID（对应请求体中的 `model` 字段）
+    #[serde(rename = "modelId")]
+    pub model_id: String,
+    /// 可选显示名称
+    #[serde(rename = "displayName", skip_serializing_if = "Option::is_none")]
+    pub display_name: Option<String>,
+    /// 标签列表：每条为一个 (domain, complexity) 交叉点，支持多个
+    #[serde(default)]
+    pub labels: Vec<ModelLabel>,
+    /// 自评质量分 1-5，用于规则匹配和 Avengers 评分
+    #[serde(rename = "qualityScore", default = "ModelRoutingConfig::default_quality")]
+    pub quality_score: u8,
+    /// 每 1k token 综合成本（input+output），用于 Avengers 成本归一化
+    #[serde(rename = "costPer1k", skip_serializing_if = "Option::is_none")]
+    pub cost_per_1k: Option<f64>,
+}
+
+impl ModelRoutingConfig {
+    fn default_quality() -> u8 {
+        3
+    }
+}
+
 /// 供应商路由配置（存储于 meta 字段，无需 schema 变更）
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ProviderRoutingConfig {
     /// 是否参与智能路由
     #[serde(default)]
     pub enabled: bool,
-    /// 能力标签，如 ["coding", "math", "writing", "translation", "analysis", "general"]
+    /// 各模型的路由配置（按模型打标签）
     #[serde(default)]
-    pub tags: Vec<String>,
-    /// 复杂度覆盖: "simple" | "medium" | "complex" | "all"
-    #[serde(default = "ProviderRoutingConfig::default_complexity")]
-    pub complexity: String,
-    /// 自评质量分 1-5，用于 Avengers 评分
-    #[serde(default = "ProviderRoutingConfig::default_quality")]
-    pub quality_score: u8,
-    /// 每 1k token 综合成本（input+output），用于 Avengers 成本归一化
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub cost_per_1k: Option<f64>,
-}
-
-impl ProviderRoutingConfig {
-    fn default_complexity() -> String {
-        "all".to_string()
-    }
-    fn default_quality() -> u8 {
-        3
-    }
+    pub models: Vec<ModelRoutingConfig>,
 }
 
 /// 供应商元数据

@@ -7,7 +7,7 @@
 //! Key 全程保留在本地，此模块不涉及任何网络请求。
 
 use super::query_classifier::{Complexity, Domain, QueryProfile};
-use crate::provider::{Provider, ProviderRoutingConfig};
+use crate::provider::{ModelRoutingConfig, Provider};
 use serde::{Deserialize, Serialize};
 
 // ── 路由设置（全局，按 app_type 存储）─────────────────────────────────────────
@@ -70,6 +70,8 @@ pub enum RoutingStrategy {
 pub struct RouterDecision {
     pub provider_id: String,
     pub provider_name: String,
+    /// 选中的模型 ID（rule_match / avengers 策略时填入，用于覆盖请求体的 `model` 字段）
+    pub selected_model: Option<String>,
     /// 人类可读的路由原因，例如 "coding · complex → 质量最高(5)"
     pub reason: String,
     pub domain: String,
@@ -96,21 +98,17 @@ pub fn select(
         return select_arch_router(profile, providers);
     }
 
-    // rule_match / avengers：筛选出显式配置了路由标签的 providers
-    let candidates: Vec<(&Provider, &ProviderRoutingConfig)> = providers
+    // rule_match / avengers：筛选出有匹配标签的 (provider, model_config) 对
+    let candidates: Vec<(&Provider, &ModelRoutingConfig)> = providers
         .iter()
         .filter_map(|p| {
             let rc = p.meta.as_ref()?.routing_config.as_ref()?;
             if !rc.enabled {
                 return None;
             }
-            if !tag_matches(rc, &profile.domain) {
-                return None;
-            }
-            if !complexity_matches(rc, &profile.complexity) {
-                return None;
-            }
-            Some((p, rc))
+            // 找到第一个标签匹配当前 (domain, complexity) 的模型配置
+            let model = rc.models.iter().find(|m| model_matches_profile(m, profile))?;
+            Some((p, model))
         })
         .collect();
 
@@ -218,6 +216,7 @@ fn select_arch_router(
             return Some(RouterDecision {
                 provider_id: provider.id.clone(),
                 provider_name: provider.name.clone(),
+                selected_model: None,
                 reason: format!(
                     "{} · {} → {}",
                     profile.domain, profile.complexity, provider.name
@@ -235,21 +234,19 @@ fn select_arch_router(
 
 fn select_rule_match(
     profile: &QueryProfile,
-    candidates: &[(&Provider, &ProviderRoutingConfig)],
+    candidates: &[(&Provider, &ModelRoutingConfig)],
 ) -> Option<RouterDecision> {
-    // 按质量评分降序，相同分数保持原有顺序（stable sort）
     let mut ranked: Vec<_> = candidates.iter().collect();
     ranked.sort_by(|(_, a), (_, b)| b.quality_score.cmp(&a.quality_score));
 
-    let (provider, rc) = ranked.first()?;
+    let (provider, model) = ranked.first()?;
     Some(RouterDecision {
         provider_id: provider.id.clone(),
         provider_name: provider.name.clone(),
+        selected_model: Some(model.model_id.clone()),
         reason: format!(
-            "{} · {} → 质量最高({})",
-            profile.domain,
-            profile.complexity,
-            rc.quality_score
+            "{} · {} → 质量最高({}) [{}]",
+            profile.domain, profile.complexity, model.quality_score, model.model_id
         ),
         domain: profile.domain.to_string(),
         complexity: profile.complexity.to_string(),
@@ -261,13 +258,12 @@ fn select_rule_match(
 
 fn select_avengers(
     profile: &QueryProfile,
-    candidates: &[(&Provider, &ProviderRoutingConfig)],
+    candidates: &[(&Provider, &ModelRoutingConfig)],
     alpha: f64,
 ) -> Option<RouterDecision> {
-    // 归一化成本（input + output per 1k tokens）
     let costs: Vec<f64> = candidates
         .iter()
-        .map(|(_, rc)| rc.cost_per_1k.unwrap_or(0.0))
+        .map(|(_, m)| m.cost_per_1k.unwrap_or(0.0))
         .collect();
 
     let min_cost = costs.iter().cloned().fold(f64::INFINITY, f64::min);
@@ -278,30 +274,28 @@ fn select_avengers(
         max_cost - min_cost
     };
 
-    let mut scored: Vec<(f64, &Provider, &ProviderRoutingConfig)> = candidates
+    let mut scored: Vec<(f64, &Provider, &ModelRoutingConfig)> = candidates
         .iter()
         .zip(costs.iter())
-        .map(|((p, rc), &cost)| {
-            let perf = rc.quality_score as f64 / 5.0; // 归一化到 0-1
+        .map(|((p, m), &cost)| {
+            let perf = m.quality_score as f64 / 5.0;
             let cost_norm = (cost - min_cost) / cost_range;
             let cost_efficiency = 1.0 - cost_norm;
             let score = alpha * perf + (1.0 - alpha) * cost_efficiency;
-            (score, *p, *rc)
+            (score, *p, *m)
         })
         .collect();
 
     scored.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
 
-    let (score, provider, _rc) = scored.first()?;
+    let (score, provider, model) = scored.first()?;
     Some(RouterDecision {
         provider_id: provider.id.clone(),
         provider_name: provider.name.clone(),
+        selected_model: Some(model.model_id.clone()),
         reason: format!(
-            "{} · {} → Avengers(α={:.1}, 分={:.2})",
-            profile.domain,
-            profile.complexity,
-            alpha,
-            score
+            "{} · {} → Avengers(α={:.1}, 分={:.2}) [{}]",
+            profile.domain, profile.complexity, alpha, score, model.model_id
         ),
         domain: profile.domain.to_string(),
         complexity: profile.complexity.to_string(),
@@ -311,40 +305,35 @@ fn select_avengers(
 
 // ── 辅助函数 ─────────────────────────────────────────────────────────────────
 
-/// 检查 provider 的能力标签是否覆盖当前 domain
-fn tag_matches(rc: &ProviderRoutingConfig, domain: &Domain) -> bool {
-    if rc.tags.is_empty() {
-        return false;
-    }
-    let domain_str = domain.as_str();
-    rc.tags.iter().any(|t| t == domain_str || t == "general")
-}
-
-/// 检查 provider 的复杂度覆盖范围是否包含当前 complexity
-fn complexity_matches(rc: &ProviderRoutingConfig, complexity: &Complexity) -> bool {
-    match rc.complexity.as_str() {
-        "all" => true,
-        "simple" => complexity == &Complexity::Simple,
-        "medium" => complexity != &Complexity::Complex,
-        "complex" => complexity == &Complexity::Complex,
-        _ => true,
-    }
+/// 检查某个模型的标签是否覆盖当前 (domain, complexity)
+fn model_matches_profile(model: &ModelRoutingConfig, profile: &QueryProfile) -> bool {
+    let domain_str = profile.domain.as_str();
+    let complexity_str = profile.complexity.as_str();
+    model.labels.iter().any(|label| {
+        label.domain == domain_str && label.complexity == complexity_str
+    })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::provider::{Provider, ProviderMeta, ProviderRoutingConfig};
+    use crate::provider::{ModelLabel, ModelRoutingConfig, Provider, ProviderMeta, ProviderRoutingConfig};
     use serde_json::json;
 
-    fn make_provider(id: &str, tags: &[&str], complexity: &str, quality: u8, cost: f64) -> Provider {
+    fn make_provider(id: &str, model_id: &str, labels: &[(&str, &str)], quality: u8, cost: f64) -> Provider {
         let mut meta = ProviderMeta::default();
         meta.routing_config = Some(ProviderRoutingConfig {
             enabled: true,
-            tags: tags.iter().map(|s| s.to_string()).collect(),
-            complexity: complexity.to_string(),
-            quality_score: quality,
-            cost_per_1k: Some(cost),
+            models: vec![ModelRoutingConfig {
+                model_id: model_id.to_string(),
+                display_name: None,
+                labels: labels.iter().map(|(d, c)| ModelLabel {
+                    domain: d.to_string(),
+                    complexity: c.to_string(),
+                }).collect(),
+                quality_score: quality,
+                cost_per_1k: Some(cost),
+            }],
         });
         let mut p = Provider::with_id(
             id.to_string(),
@@ -359,9 +348,9 @@ mod tests {
     #[test]
     fn test_rule_match_picks_highest_quality() {
         let providers = vec![
-            make_provider("a", &["coding"], "all", 3, 0.001),
-            make_provider("b", &["coding"], "all", 5, 0.005),
-            make_provider("c", &["writing"], "all", 5, 0.001),
+            make_provider("a", "model-a", &[("coding", "complex")], 3, 0.001),
+            make_provider("b", "model-b", &[("coding", "complex")], 5, 0.005),
+            make_provider("c", "model-c", &[("writing", "complex")], 5, 0.001),
         ];
         let profile = QueryProfile {
             domain: Domain::Coding,
@@ -374,11 +363,12 @@ mod tests {
         };
         let decision = select(&profile, &providers, &settings).unwrap();
         assert_eq!(decision.provider_id, "b");
+        assert_eq!(decision.selected_model.as_deref(), Some("model-b"));
     }
 
     #[test]
     fn test_no_match_returns_none() {
-        let providers = vec![make_provider("a", &["writing"], "all", 5, 0.001)];
+        let providers = vec![make_provider("a", "model-a", &[("writing", "complex")], 5, 0.001)];
         let profile = QueryProfile {
             domain: Domain::Math,
             complexity: Complexity::Complex,
@@ -393,7 +383,7 @@ mod tests {
 
     #[test]
     fn test_disabled_returns_none() {
-        let providers = vec![make_provider("a", &["coding"], "all", 5, 0.001)];
+        let providers = vec![make_provider("a", "model-a", &[("coding", "simple")], 5, 0.001)];
         let profile = QueryProfile {
             domain: Domain::Coding,
             complexity: Complexity::Simple,
@@ -406,22 +396,42 @@ mod tests {
     }
 
     #[test]
-    fn test_complexity_filter() {
-        let providers = vec![
-            make_provider("simple_only", &["coding"], "simple", 5, 0.0),
-            make_provider("all", &["coding"], "all", 3, 0.0),
-        ];
-        let profile = QueryProfile {
-            domain: Domain::Coding,
-            complexity: Complexity::Complex,
-        };
+    fn test_multi_label_model_matches() {
+        // 一个模型打了多个标签（数学简单 + 代码复杂）
+        let mut meta = ProviderMeta::default();
+        meta.routing_config = Some(ProviderRoutingConfig {
+            enabled: true,
+            models: vec![ModelRoutingConfig {
+                model_id: "multi-model".to_string(),
+                display_name: None,
+                labels: vec![
+                    ModelLabel { domain: "math".to_string(), complexity: "simple".to_string() },
+                    ModelLabel { domain: "coding".to_string(), complexity: "complex".to_string() },
+                ],
+                quality_score: 4,
+                cost_per_1k: Some(0.002),
+            }],
+        });
+        let mut p = Provider::with_id("multi".to_string(), "Multi Provider".to_string(), json!({}), None);
+        p.meta = Some(meta);
+        let providers = vec![p];
+
         let settings = IntelligentRoutingSettings {
             enabled: true,
             strategy: RoutingStrategy::RuleMatch,
             ..Default::default()
         };
-        let decision = select(&profile, &providers, &settings).unwrap();
-        // simple_only 被过滤，只剩 all
-        assert_eq!(decision.provider_id, "all");
+
+        // 数学简单：匹配
+        let decision = select(&QueryProfile { domain: Domain::Math, complexity: Complexity::Simple }, &providers, &settings);
+        assert!(decision.is_some());
+
+        // 代码复杂：匹配
+        let decision = select(&QueryProfile { domain: Domain::Coding, complexity: Complexity::Complex }, &providers, &settings);
+        assert!(decision.is_some());
+
+        // 数学复杂：不匹配
+        let decision = select(&QueryProfile { domain: Domain::Math, complexity: Complexity::Complex }, &providers, &settings);
+        assert!(decision.is_none());
     }
 }

@@ -50,6 +50,8 @@ pub struct RequestContext {
     pub current_provider_id: String,
     /// 智能路由决策结果（`None` 表示未启用或无匹配，回落到默认队列）
     pub routing_decision: Option<RouterDecision>,
+    /// 路由选中的模型 ID（rule_match / avengers 策略时填入，用于覆盖请求体 `model` 字段）
+    pub routing_model_override: Option<String>,
     /// 请求中的模型名称
     pub request_model: String,
     /// 日志标签（如 "Claude"、"Codex"、"Gemini"）
@@ -171,6 +173,10 @@ impl RequestContext {
             session_id
         );
 
+        let routing_model_override = routing_decision
+            .as_ref()
+            .and_then(|d| d.selected_model.clone());
+
         Ok(Self {
             start_time,
             app_config,
@@ -178,6 +184,7 @@ impl RequestContext {
             providers,
             current_provider_id,
             routing_decision,
+            routing_model_override,
             request_model,
             tag,
             app_type_str,
@@ -260,6 +267,18 @@ impl RequestContext {
     /// 返回在创建上下文时已选择的 providers，避免重复调用 select_providers()
     pub fn get_providers(&self) -> Vec<Provider> {
         self.providers.clone()
+    }
+
+    /// 将路由选中的模型覆盖写入请求体（rule_match / avengers 策略时生效）
+    ///
+    /// 仅当 `routing_model_override` 有值时才修改 `model` 字段，否则原样返回。
+    pub fn apply_model_override(&self, mut body: serde_json::Value) -> serde_json::Value {
+        if let Some(model) = &self.routing_model_override {
+            if let Some(obj) = body.as_object_mut() {
+                obj.insert("model".to_string(), serde_json::Value::String(model.clone()));
+            }
+        }
+        body
     }
 
     /// 计算请求延迟（毫秒）

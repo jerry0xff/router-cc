@@ -101,7 +101,7 @@ pub async fn handle_messages(
         .forward_with_retry(
             &AppType::Claude,
             endpoint,
-            body.clone(),
+            ctx.apply_model_override(body.clone()),
             headers,
             extensions,
             ctx.get_providers(),
@@ -394,7 +394,7 @@ pub async fn handle_chat_completions(
         .forward_with_retry(
             &AppType::Codex,
             &endpoint,
-            body,
+            ctx.apply_model_override(body),
             headers,
             extensions,
             ctx.get_providers(),
@@ -448,7 +448,7 @@ pub async fn handle_responses(
         .forward_with_retry(
             &AppType::Codex,
             &endpoint,
-            body,
+            ctx.apply_model_override(body),
             headers,
             extensions,
             ctx.get_providers(),
@@ -502,7 +502,7 @@ pub async fn handle_responses_compact(
         .forward_with_retry(
             &AppType::Codex,
             &endpoint,
-            body,
+            ctx.apply_model_override(body),
             headers,
             extensions,
             ctx.get_providers(),
@@ -567,7 +567,7 @@ pub async fn handle_gemini(
         .forward_with_retry(
             &AppType::Gemini,
             endpoint,
-            body,
+            ctx.apply_model_override(body),
             headers,
             extensions,
             ctx.get_providers(),
