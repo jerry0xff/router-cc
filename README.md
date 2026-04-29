@@ -1,19 +1,39 @@
 <div align="center">
 
-# CC Switch
+# CC Switch — Intelligent Routing Fork
 
 ### The All-in-One Manager for Claude Code, Codex, Gemini CLI, OpenCode & OpenClaw
 
-[![Version](https://img.shields.io/github/v/release/farion1231/cc-switch?color=blue&label=version)](https://github.com/farion1231/cc-switch/releases)
-[![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey.svg)](https://github.com/farion1231/cc-switch/releases)
+[![Version](https://img.shields.io/badge/version-3.14.1--routing-blue)](#)
+[![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey.svg)](https://github.com/jerry0xff/router-cc/releases)
 [![Built with Tauri](https://img.shields.io/badge/built%20with-Tauri%202-orange.svg)](https://tauri.app/)
-[![Downloads](https://img.shields.io/github/downloads/farion1231/cc-switch/total)](https://github.com/farion1231/cc-switch/releases/latest)
+[![Fork of](https://img.shields.io/badge/fork%20of-farion1231%2Fcc--switch-lightgrey)](https://github.com/farion1231/cc-switch)
 
-<a href="https://trendshift.io/repositories/15372" target="_blank"><img src="https://trendshift.io/api/badge/repositories/15372" alt="farion1231%2Fcc-switch | Trendshift" style="width: 250px; height: 55px;" width="250" height="55"/></a>
+> **This is a community fork of [cc-switch](https://github.com/farion1231/cc-switch) with an Intelligent Routing layer added.**
+> Original upstream: [farion1231/cc-switch](https://github.com/farion1231/cc-switch)
 
-English | [中文](README_ZH.md) | [日本語](README_JA.md) | [Changelog](CHANGELOG.md)
+English | [中文](README_ZH.md) | [Changelog](CHANGELOG.md)
 
 </div>
+
+## What's New in This Fork
+
+This fork integrates an **Intelligent Routing** engine on top of cc-switch's proxy layer, allowing the proxy to automatically select the best provider for each request based on query type and provider capabilities.
+
+### Intelligent Routing Features
+
+- **Query Classification** — Automatically classifies each request by domain (coding, math, creative writing, etc.) and complexity (simple / complex)
+- **Tag-based Provider Matching** — Each provider can be tagged with the domains and complexity levels it handles best; the router only routes to providers that match the query
+- **Avengers Strategy** — When multiple providers match, scores them with a weighted formula `α · quality + (1-α) · cost_efficiency` and picks the best one
+- **Per-provider Routing Config** — Set quality score, cost per 1k tokens, supported tags, and complexity range directly in the provider form
+- **Global Routing Settings** — Per-app (Claude / Codex / Gemini) toggle for intelligent routing, α weight slider, and strategy selection (tag-match / avengers)
+- **Routing Reason Display** — The proxy status panel shows which provider was selected and why, in real time
+
+### How to Use
+
+1. Open **Settings → Intelligent Routing** to enable routing for an app type and configure the strategy
+2. Edit each provider and fill in the **Routing Config** section (tags, complexity, quality score, cost)
+3. Start the proxy — requests will be automatically routed to the best-matched provider
 
 ## ❤️Sponsor
 

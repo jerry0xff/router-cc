@@ -1,19 +1,39 @@
 <div align="center">
 
-# CC Switch
+# CC Switch — 智能路由分支版本
 
 ### Claude Code、Codex、Gemini CLI、OpenCode 和 OpenClaw 的全方位管理工具
 
-[![Version](https://img.shields.io/github/v/release/farion1231/cc-switch?color=blue&label=version)](https://github.com/farion1231/cc-switch/releases)
-[![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey.svg)](https://github.com/farion1231/cc-switch/releases)
+[![Version](https://img.shields.io/badge/version-3.14.1--routing-blue)](#)
+[![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey.svg)](https://github.com/jerry0xff/router-cc/releases)
 [![Built with Tauri](https://img.shields.io/badge/built%20with-Tauri%202-orange.svg)](https://tauri.app/)
-[![Downloads](https://img.shields.io/github/downloads/farion1231/cc-switch/total)](https://github.com/farion1231/cc-switch/releases/latest)
+[![Fork of](https://img.shields.io/badge/fork%20of-farion1231%2Fcc--switch-lightgrey)](https://github.com/farion1231/cc-switch)
 
-<a href="https://trendshift.io/repositories/15372" target="_blank"><img src="https://trendshift.io/api/badge/repositories/15372" alt="farion1231%2Fcc-switch | Trendshift" style="width: 250px; height: 55px;" width="250" height="55"/></a>
+> **本项目是 [cc-switch](https://github.com/farion1231/cc-switch) 的社区分支，在原版基础上新增了智能路由层。**
+> 上游原版：[farion1231/cc-switch](https://github.com/farion1231/cc-switch)
 
-[English](README.md) | 中文 | [日本語](README_JA.md) | [更新日志](CHANGELOG.md)
+[English](README.md) | 中文 | [更新日志](CHANGELOG.md)
 
 </div>
+
+## 本分支新增内容
+
+本分支在 cc-switch 的代理层之上集成了**智能路由**引擎，可根据请求的查询类型和供应商能力自动选择最合适的供应商。
+
+### 智能路由功能
+
+- **查询分类** — 自动按领域（编程、数学、创意写作等）和复杂度（简单 / 复杂）对每条请求进行分类
+- **标签匹配路由** — 每个供应商可标注其擅长的领域和复杂度范围，路由器只将请求发送给匹配的供应商
+- **复仇者策略** — 当多个供应商均匹配时，使用加权公式 `α × 质量分 + (1-α) × 成本效益` 综合评分，选出最优供应商
+- **供应商路由配置** — 在供应商表单中直接设置质量分、每千 Token 成本、标签和复杂度范围
+- **全局路由设置** — 支持按应用（Claude / Codex / Gemini）独立开关智能路由，调整 α 权重和策略（标签匹配 / 复仇者）
+- **路由原因展示** — 代理状态面板实时显示当前选中的供应商及选择原因
+
+### 使用方式
+
+1. 打开 **设置 → 智能路由**，为指定应用类型启用路由并配置策略
+2. 编辑每个供应商，填写**路由配置**部分（标签、复杂度、质量分、成本）
+3. 启动代理 — 请求将自动被路由到最匹配的供应商
 
 ## ❤️赞助商
 
