@@ -217,9 +217,19 @@ pub async fn handle_streaming(
     // 获取流式超时配置
     let timeout_config = ctx.streaming_timeout_config();
 
+    // 构建路由前缀注入（第一行展示路由信息）
+    let routing_prefix = {
+        let text = match &ctx.routing_decision {
+            Some(d) => format!("[⚡ {}]\n", d.reason),
+            None => format!("[直连 → {}]\n", ctx.provider.name),
+        };
+        let is_claude_format = parser_config.app_type_str == "claude";
+        Some(RoutingPrefixConfig { text, is_claude_format })
+    };
+
     // 创建带日志和超时的透传流
     let logged_stream =
-        create_logged_passthrough_stream(stream, ctx.tag, Some(usage_collector), timeout_config);
+        create_logged_passthrough_stream(stream, ctx.tag, Some(usage_collector), timeout_config, routing_prefix);
 
     let body = axum::body::Body::from_stream(logged_stream);
     match builder.body(body) {
@@ -598,18 +608,52 @@ async fn log_usage_internal(
     }
 }
 
+/// 路由前缀注入配置
+pub struct RoutingPrefixConfig {
+    /// 要注入的路由文本（第一行展示）
+    pub text: String,
+    /// true = Claude SSE 格式，false = OpenAI 兼容格式
+    pub is_claude_format: bool,
+}
+
+/// 构造 Claude 格式的路由文本注入 SSE 块
+fn make_claude_routing_delta(text: &str) -> Vec<u8> {
+    let escaped = text
+        .replace('\\', "\\\\")
+        .replace('"', "\\\"")
+        .replace('\n', "\\n");
+    format!(
+        "data: {{\"type\":\"content_block_delta\",\"index\":0,\"delta\":{{\"type\":\"text_delta\",\"text\":\"{escaped}\"}}}}\n\n"
+    )
+    .into_bytes()
+}
+
+/// 构造 OpenAI 兼容格式的路由文本注入 SSE 块
+fn make_openai_routing_chunk(text: &str) -> Vec<u8> {
+    let escaped = text
+        .replace('\\', "\\\\")
+        .replace('"', "\\\"")
+        .replace('\n', "\\n");
+    format!(
+        "data: {{\"id\":\"routing\",\"object\":\"chat.completion.chunk\",\"choices\":[{{\"delta\":{{\"content\":\"{escaped}\"}},\"index\":0,\"finish_reason\":null}}]}}\n\n"
+    )
+    .into_bytes()
+}
+
 /// 创建带日志记录和超时控制的透传流
 pub fn create_logged_passthrough_stream(
     stream: impl Stream<Item = Result<Bytes, std::io::Error>> + Send + 'static,
     tag: &'static str,
     usage_collector: Option<SseUsageCollector>,
     timeout_config: StreamingTimeoutConfig,
+    routing_prefix: Option<RoutingPrefixConfig>,
 ) -> impl Stream<Item = Result<Bytes, std::io::Error>> + Send {
     async_stream::stream! {
         let mut buffer = String::new();
         let mut utf8_remainder: Vec<u8> = Vec::new();
         let mut collector = usage_collector;
         let mut is_first_chunk = true;
+        let mut routing_injected = routing_prefix.is_none();
 
         // 超时配置
         let first_byte_timeout = if timeout_config.first_byte_timeout > 0 {
@@ -657,6 +701,15 @@ pub fn create_logged_passthrough_stream(
                             "[{tag}] 已接收上游流式首包: bytes={}",
                             bytes.len()
                         );
+                        // OpenAI 兼容格式：在第一包之前注入路由信息
+                        if !routing_injected {
+                            if let Some(ref pc) = routing_prefix {
+                                if !pc.is_claude_format {
+                                    yield Ok(Bytes::from(make_openai_routing_chunk(&pc.text)));
+                                    routing_injected = true;
+                                }
+                            }
+                        }
                     }
                     is_first_chunk = false;
                     crate::proxy::sse::append_utf8_safe(&mut buffer, &mut utf8_remainder, &bytes);
@@ -684,7 +737,20 @@ pub fn create_logged_passthrough_stream(
                         }
                     }
 
-                    yield Ok(bytes);
+                    yield Ok(bytes.clone());
+
+                    // Claude 格式：在 content_block_start 之后注入路由信息 delta
+                    if !routing_injected {
+                        if let Some(ref pc) = routing_prefix {
+                            if pc.is_claude_format {
+                                let chunk_text = String::from_utf8_lossy(&bytes);
+                                if chunk_text.contains("\"content_block_start\"") {
+                                    yield Ok(Bytes::from(make_claude_routing_delta(&pc.text)));
+                                    routing_injected = true;
+                                }
+                            }
+                        }
+                    }
                 }
                 Some(Err(e)) => {
                     log::error!("[{tag}] 流错误: {e}");

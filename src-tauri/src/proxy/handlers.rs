@@ -241,6 +241,7 @@ async fn handle_claude_transform(
             "Claude/OpenRouter",
             Some(usage_collector),
             timeout_config,
+            None, // 此路径已有格式转换层，不注入路由前缀
         );
 
         let mut headers = axum::http::HeaderMap::new();

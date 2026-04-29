@@ -49,7 +49,6 @@ pub struct RequestContext {
     /// 代理模式下如果实际使用的 provider 与此不一致，会触发切换以确保 UI 始终准确。
     pub current_provider_id: String,
     /// 智能路由决策结果（`None` 表示未启用或无匹配，回落到默认队列）
-    #[allow(dead_code)]
     pub routing_decision: Option<RouterDecision>,
     /// 请求中的模型名称
     pub request_model: String,
@@ -153,17 +152,14 @@ impl RequestContext {
             .cloned()
             .ok_or(ProxyError::NoAvailableProvider)?;
 
-        // 将智能路由决策原因写入共享状态，供 UI 展示
+        // 将路由原因写入共享状态（始终写入，直连也写）
         {
             let mut reasons = state.routing_reasons.write().await;
-            match &routing_decision {
-                Some(decision) => {
-                    reasons.insert(app_type_str.to_string(), decision.reason.clone());
-                }
-                None => {
-                    reasons.remove(app_type_str);
-                }
-            }
+            let reason = match &routing_decision {
+                Some(d) => d.reason.clone(),
+                None => format!("直连 → {}", provider.name),
+            };
+            reasons.insert(app_type_str.to_string(), reason);
         }
 
         log::debug!(
