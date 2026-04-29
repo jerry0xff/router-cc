@@ -1,0 +1,64 @@
+name: Build Windows
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    runs-on: windows-2022
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '20'
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v5
+        with:
+          version: 10.12.3
+          run_install: false
+
+      - name: Install frontend deps
+        run: pnpm install --frozen-lockfile
+
+      - name: Build Tauri App (Windows, no signing)
+        run: pnpm tauri build
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ""
+
+      - name: Collect artifacts
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path release-assets | Out-Null
+          $msi = Get-ChildItem -Path 'src-tauri/target/release/bundle' -Recurse -Include *.msi | Select-Object -First 1
+          if ($msi) {
+            Copy-Item $msi.FullName "release-assets/CC-Switch_3.14.1_x64_en-US.msi"
+            Write-Host "MSI: $($msi.FullName)"
+          }
+          $nsis = Get-ChildItem -Path 'src-tauri/target/release/bundle' -Recurse -Include *.exe | Where-Object { $_.Name -notlike 'cc-switch.exe' } | Select-Object -First 1
+          if ($nsis) {
+            Copy-Item $nsis.FullName "release-assets/CC-Switch_3.14.1_x64-setup.exe"
+            Write-Host "NSIS: $($nsis.FullName)"
+          }
+          $exe = 'src-tauri/target/release/cc-switch.exe'
+          if (Test-Path $exe) {
+            Compress-Archive -Path $exe -DestinationPath "release-assets/CC-Switch_3.14.1_x64_portable.zip" -Force
+            Write-Host "Portable zip created"
+          }
+          Get-ChildItem release-assets
+
+      - name: Upload Windows artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: CC-Switch-Windows
+          path: release-assets/*
+          if-no-files-found: error
