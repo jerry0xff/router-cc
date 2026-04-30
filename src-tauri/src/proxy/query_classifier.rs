@@ -231,7 +231,7 @@ pub async fn classify_remote(
     let payload = serde_json::json!({ "messages": messages });
 
     let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(3))
+        .timeout(std::time::Duration::from_secs(30))
         .build()
         .ok()?;
 
