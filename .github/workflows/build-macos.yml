@@ -1,0 +1,61 @@
+name: Build macOS
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-macos:
+    runs-on: macos-14
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '20'
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v5
+        with:
+          version: 10.12.3
+          run_install: false
+
+      - name: Install frontend deps
+        run: pnpm install --frozen-lockfile
+
+      - name: Build Tauri App (macOS Apple Silicon, no signing)
+        run: pnpm tauri build --bundles dmg,app --target aarch64-apple-darwin
+        env:
+          APPLE_SIGNING_IDENTITY: '-'
+
+      - name: Collect artifacts
+        run: |
+          mkdir -p release-assets
+          DMG=$(find src-tauri/target/aarch64-apple-darwin/release/bundle/dmg -name "*.dmg" | head -1)
+          if [ -n "$DMG" ]; then
+            cp "$DMG" "release-assets/CC-Switch_3.14.1_aarch64.dmg"
+            echo "DMG: $DMG"
+          fi
+          APP_DIR=$(find src-tauri/target/aarch64-apple-darwin/release/bundle/macos -name "*.app" -type d | head -1)
+          if [ -n "$APP_DIR" ]; then
+            tar -czf "release-assets/CC-Switch_3.14.1_aarch64.app.tar.gz" -C "$(dirname "$APP_DIR")" "$(basename "$APP_DIR")"
+            echo "App bundle archived"
+          fi
+          ls release-assets/
+
+      - name: Upload macOS artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: CC-Switch-macOS-Apple-Silicon
+          path: release-assets/*
+          if-no-files-found: error
