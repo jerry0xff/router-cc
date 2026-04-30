@@ -34,7 +34,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Build Tauri App (macOS Apple Silicon, no signing)
-        run: pnpm tauri build --bundles dmg,app --target aarch64-apple-darwin
+        run: pnpm tauri build --bundles dmg,app --target aarch64-apple-darwin --config src-tauri/tauri.macos.conf.json
         env:
           APPLE_SIGNING_IDENTITY: '-'
 
