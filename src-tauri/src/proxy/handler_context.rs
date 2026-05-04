@@ -71,6 +71,8 @@ pub struct RequestContext {
     pub optimizer_config: OptimizerConfig,
     /// Copilot 优化器配置
     pub copilot_optimizer_config: CopilotOptimizerConfig,
+    /// 是否在流式响应首行注入路由原因（由路由设置的 show_routing_reason 控制）
+    pub show_routing_reason: bool,
 }
 
 impl RequestContext {
@@ -214,6 +216,8 @@ impl RequestContext {
             .as_ref()
             .and_then(|d| d.selected_model.clone());
 
+        let show_routing_reason = routing_settings.show_routing_reason;
+
         Ok(Self {
             start_time,
             app_config,
@@ -231,6 +235,7 @@ impl RequestContext {
             rectifier_config,
             optimizer_config,
             copilot_optimizer_config,
+            show_routing_reason,
         })
     }
 

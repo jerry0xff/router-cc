@@ -217,14 +217,14 @@ pub async fn handle_streaming(
     // 获取流式超时配置
     let timeout_config = ctx.streaming_timeout_config();
 
-    // 构建路由前缀注入（第一行展示路由信息）
-    let routing_prefix = {
-        let text = match &ctx.routing_decision {
-            Some(d) => format!("[⚡ {}]\n", d.reason),
-            None => format!("[直连 → {}]\n", ctx.provider.name),
-        };
-        let is_claude_format = parser_config.app_type_str == "claude";
-        Some(RoutingPrefixConfig { text, is_claude_format })
+    // 路由前缀注入：仅当用户开启 show_routing_reason 且本次请求发生了智能路由时注入
+    let routing_prefix = match (&ctx.routing_decision, ctx.show_routing_reason) {
+        (Some(d), true) => {
+            let text = format!("[⚡ {}]\n", d.reason);
+            let is_claude_format = parser_config.app_type_str == "claude";
+            Some(RoutingPrefixConfig { text, is_claude_format })
+        }
+        _ => None,
     };
 
     // 创建带日志和超时的透传流
