@@ -85,7 +85,7 @@ jobs:
           ls -lh release-assets/
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: CC-Switch-Windows-x64
           path: release-assets/*
