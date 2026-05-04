@@ -1,6 +1,13 @@
 name: Build macOS
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/**'
+      - 'src-tauri/**'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
   workflow_dispatch:
 
 permissions:
@@ -15,7 +22,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Setup Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v4
         with:
           node-version: '20'
 
@@ -30,6 +37,23 @@ jobs:
           version: 10.12.3
           run_install: false
 
+      - name: Cache pnpm
+        uses: actions/cache@v4
+        with:
+          path: ~/.pnpm-store
+          key: macos-pnpm-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: macos-pnpm-
+
+      - name: Cache Rust
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            src-tauri/target
+          key: macos-aarch64-rust-${{ hashFiles('src-tauri/Cargo.lock') }}
+          restore-keys: macos-aarch64-rust-
+
       - name: Install frontend deps
         run: pnpm install --frozen-lockfile
 
@@ -43,21 +67,23 @@ jobs:
       - name: Collect artifacts
         run: |
           mkdir -p release-assets
+          VER=$(node -p "require('./package.json').version" 2>/dev/null || echo "0.0.0")
           DMG=$(find src-tauri/target/aarch64-apple-darwin/release/bundle/dmg -name "*.dmg" | head -1)
           if [ -n "$DMG" ]; then
-            cp "$DMG" "release-assets/CC-Switch_3.14.1_aarch64.dmg"
+            cp "$DMG" "release-assets/CC-Switch_${VER}_aarch64.dmg"
             echo "DMG: $DMG"
           fi
           APP_DIR=$(find src-tauri/target/aarch64-apple-darwin/release/bundle/macos -name "*.app" -type d | head -1)
           if [ -n "$APP_DIR" ]; then
-            tar -czf "release-assets/CC-Switch_3.14.1_aarch64.app.tar.gz" -C "$(dirname "$APP_DIR")" "$(basename "$APP_DIR")"
+            tar -czf "release-assets/CC-Switch_${VER}_aarch64.app.tar.gz" \
+              -C "$(dirname "$APP_DIR")" "$(basename "$APP_DIR")"
             echo "App bundle archived"
           fi
-          ls release-assets/
+          ls -lh release-assets/
 
-      - name: Upload macOS artifacts
+      - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: CC-Switch-macOS-Apple-Silicon
+          name: CC-Switch-macOS-aarch64
           path: release-assets/*
           if-no-files-found: error

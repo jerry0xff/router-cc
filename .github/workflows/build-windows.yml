@@ -1,6 +1,13 @@
 name: Build Windows
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/**'
+      - 'src-tauri/**'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
   workflow_dispatch:
 
 permissions:
@@ -8,18 +15,21 @@ permissions:
 
 jobs:
   build-windows:
-    runs-on: windows-2022
+    runs-on: windows-latest
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
       - name: Setup Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v4
         with:
           node-version: '20'
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v5
@@ -27,36 +37,56 @@ jobs:
           version: 10.12.3
           run_install: false
 
+      - name: Cache pnpm
+        uses: actions/cache@v4
+        with:
+          path: ~\AppData\Local\pnpm\store
+          key: windows-pnpm-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: windows-pnpm-
+
+      - name: Cache Rust
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~\.cargo\registry
+            ~\.cargo\git
+            src-tauri\target
+          key: windows-x64-rust-${{ hashFiles('src-tauri/Cargo.lock') }}
+          restore-keys: windows-x64-rust-
+
       - name: Install frontend deps
         run: pnpm install --frozen-lockfile
 
-      - name: Build Tauri App (Windows, no signing)
-        run: pnpm tauri build --bundles msi,nsis
+      - name: Build Tauri App (Windows x64)
+        run: |
+          pnpm tauri build --bundles msi,nsis --target x86_64-pc-windows-msvc `
+            --config '{"bundle":{"createUpdaterArtifacts":false},"plugins":{"updater":{"pubkey":""}}}'
 
       - name: Collect artifacts
-        shell: pwsh
+        shell: bash
         run: |
-          New-Item -ItemType Directory -Force -Path release-assets | Out-Null
-          $msi = Get-ChildItem -Path 'src-tauri/target/release/bundle' -Recurse -Include *.msi | Select-Object -First 1
-          if ($msi) {
-            Copy-Item $msi.FullName "release-assets/CC-Switch_3.14.1_x64_en-US.msi"
-            Write-Host "MSI: $($msi.FullName)"
-          }
-          $nsis = Get-ChildItem -Path 'src-tauri/target/release/bundle' -Recurse -Include *.exe | Where-Object { $_.Name -notlike 'cc-switch.exe' } | Select-Object -First 1
-          if ($nsis) {
-            Copy-Item $nsis.FullName "release-assets/CC-Switch_3.14.1_x64-setup.exe"
-            Write-Host "NSIS: $($nsis.FullName)"
-          }
-          $exe = 'src-tauri/target/release/cc-switch.exe'
-          if (Test-Path $exe) {
-            Compress-Archive -Path $exe -DestinationPath "release-assets/CC-Switch_3.14.1_x64_portable.zip" -Force
-            Write-Host "Portable zip created"
-          }
-          Get-ChildItem release-assets
+          mkdir -p release-assets
+          VER=$(node -p "require('./package.json').version" 2>/dev/null || echo "0.0.0")
 
-      - name: Upload Windows artifacts
+          # MSI installer
+          MSI=$(find src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi -name "*.msi" 2>/dev/null | head -1)
+          if [ -n "$MSI" ]; then
+            cp "$MSI" "release-assets/CC-Switch_${VER}_x64.msi"
+            echo "MSI: $MSI"
+          fi
+
+          # NSIS installer (.exe)
+          NSIS=$(find src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis -name "*.exe" 2>/dev/null | head -1)
+          if [ -n "$NSIS" ]; then
+            cp "$NSIS" "release-assets/CC-Switch_${VER}_x64-setup.exe"
+            echo "NSIS: $NSIS"
+          fi
+
+          ls -lh release-assets/
+
+      - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: CC-Switch-Windows
+          name: CC-Switch-Windows-x64
           path: release-assets/*
           if-no-files-found: error
