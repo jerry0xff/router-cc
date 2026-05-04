@@ -32,18 +32,34 @@ export interface RoutingConfig {
 // ── 常量 ─────────────────────────────────────────────────────────────────────
 
 const DOMAINS = [
-  { value: "coding",      labelKey: "routing.tag.coding",      defaultLabel: "代码" },
-  { value: "math",        labelKey: "routing.tag.math",         defaultLabel: "数学" },
-  { value: "writing",     labelKey: "routing.tag.writing",      defaultLabel: "写作" },
-  { value: "translation", labelKey: "routing.tag.translation",  defaultLabel: "翻译" },
-  { value: "analysis",    labelKey: "routing.tag.analysis",     defaultLabel: "分析" },
-  { value: "general",     labelKey: "routing.tag.general",      defaultLabel: "通用" },
+  { value: "coding", labelKey: "routing.tag.coding", defaultLabel: "代码" },
+  { value: "math", labelKey: "routing.tag.math", defaultLabel: "数学" },
+  { value: "writing", labelKey: "routing.tag.writing", defaultLabel: "写作" },
+  {
+    value: "translation",
+    labelKey: "routing.tag.translation",
+    defaultLabel: "翻译",
+  },
+  { value: "analysis", labelKey: "routing.tag.analysis", defaultLabel: "分析" },
+  { value: "general", labelKey: "routing.tag.general", defaultLabel: "通用" },
 ] as const;
 
 const COMPLEXITIES = [
-  { value: "simple",  labelKey: "routing.complexity.simple",  defaultLabel: "简单" },
-  { value: "medium",  labelKey: "routing.complexity.medium",  defaultLabel: "中等" },
-  { value: "complex", labelKey: "routing.complexity.complex", defaultLabel: "复杂" },
+  {
+    value: "simple",
+    labelKey: "routing.complexity.simple",
+    defaultLabel: "简单",
+  },
+  {
+    value: "medium",
+    labelKey: "routing.complexity.medium",
+    defaultLabel: "中等",
+  },
+  {
+    value: "complex",
+    labelKey: "routing.complexity.complex",
+    defaultLabel: "复杂",
+  },
 ] as const;
 
 function makeEmptyModel(): ModelRoutingConfig {
@@ -86,7 +102,8 @@ export function RoutingConfigSection({ value, onChange }: Props) {
 
       <p className="text-xs text-muted-foreground">
         {t("routing.sectionDesc", {
-          defaultValue: "为每个模型配置标签，智能路由会根据查询内容自动选择最合适的模型",
+          defaultValue:
+            "为每个模型配置标签，智能路由会根据查询内容自动选择最合适的模型",
         })}
       </p>
 
@@ -133,13 +150,17 @@ function ModelCard({ model, onChange, onRemove, t }: ModelCardProps) {
       (l) => l.domain === domain && l.complexity === complexity,
     );
     const labels = exists
-      ? model.labels.filter((l) => !(l.domain === domain && l.complexity === complexity))
+      ? model.labels.filter(
+          (l) => !(l.domain === domain && l.complexity === complexity),
+        )
       : [...model.labels, { domain, complexity }];
     onChange({ labels });
   };
 
   const isActive = (domain: string, complexity: string) =>
-    model.labels.some((l) => l.domain === domain && l.complexity === complexity);
+    model.labels.some(
+      (l) => l.domain === domain && l.complexity === complexity,
+    );
 
   return (
     <div className="rounded-lg border border-border bg-background/50 p-3 space-y-3">
@@ -147,7 +168,9 @@ function ModelCard({ model, onChange, onRemove, t }: ModelCardProps) {
       <div className="flex items-center gap-2">
         <input
           type="text"
-          placeholder={t("routing.modelIdPlaceholder", { defaultValue: "模型 ID，如 claude-opus-4-5" })}
+          placeholder={t("routing.modelIdPlaceholder", {
+            defaultValue: "模型 ID，如 claude-opus-4-5",
+          })}
           value={model.modelId}
           onChange={(e) => onChange({ modelId: e.target.value })}
           className="flex-1 rounded-md border border-border bg-background px-3 py-1.5 text-sm placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-primary"
@@ -270,7 +293,10 @@ export function fromMeta(meta: ProviderMeta | undefined): RoutingConfig {
       displayName: model.displayName as string | undefined,
       labels: rawLabels.map((l) => {
         const label = l as Record<string, unknown>;
-        return { domain: label.domain as string, complexity: label.complexity as string };
+        return {
+          domain: label.domain as string,
+          complexity: label.complexity as string,
+        };
       }),
       qualityScore: (model.qualityScore as number) ?? 3,
       costPer1k: model.costPer1k as number | undefined,

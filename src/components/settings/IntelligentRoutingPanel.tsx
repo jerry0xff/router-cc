@@ -4,7 +4,10 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { ToggleRow } from "@/components/ui/toggle-row";
-import { useRoutingSettings, useUpdateRoutingSettings } from "@/lib/query/routing";
+import {
+  useRoutingSettings,
+  useUpdateRoutingSettings,
+} from "@/lib/query/routing";
 import type { IntelligentRoutingSettings } from "@/lib/api/routing";
 import { useTranslation } from "react-i18next";
 
@@ -27,7 +30,8 @@ export function IntelligentRoutingPanel({ appType }: Props) {
   const { data: saved, isLoading } = useRoutingSettings(appType);
   const updateSettings = useUpdateRoutingSettings(appType);
 
-  const [form, setForm] = useState<IntelligentRoutingSettings>(DEFAULT_SETTINGS);
+  const [form, setForm] =
+    useState<IntelligentRoutingSettings>(DEFAULT_SETTINGS);
 
   useEffect(() => {
     if (saved) setForm(saved);
@@ -156,10 +160,10 @@ export function IntelligentRoutingPanel({ appType }: Props) {
               className="w-full accent-primary"
             />
             <div className="flex justify-between text-xs text-muted-foreground">
-              <span>{t("routing.costFirst", { defaultValue: "成本优先" })}</span>
               <span>
-                {t("routing.balanced", { defaultValue: "均衡" })}
+                {t("routing.costFirst", { defaultValue: "成本优先" })}
               </span>
+              <span>{t("routing.balanced", { defaultValue: "均衡" })}</span>
               <span>
                 {t("routing.perfFirst", { defaultValue: "性能优先" })}
               </span>
@@ -256,9 +260,7 @@ function StrategyCard({
       type="button"
       onClick={onSelect}
       className={`rounded-lg border p-3 text-left transition-colors hover:bg-muted/50 ${
-        selected
-          ? "border-primary/60 bg-primary/5"
-          : "border-border bg-card/50"
+        selected ? "border-primary/60 bg-primary/5" : "border-border bg-card/50"
       }`}
     >
       <p className={`text-sm font-medium ${selected ? "text-primary" : ""}`}>

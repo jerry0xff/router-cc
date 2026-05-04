@@ -350,7 +350,10 @@ export function ProxyPanel({
                           </span>
                         </div>
                         {target.routing_reason && (
-                          <p className="text-muted-foreground/70 truncate" title={target.routing_reason}>
+                          <p
+                            className="text-muted-foreground/70 truncate"
+                            title={target.routing_reason}
+                          >
                             <Zap className="inline h-2.5 w-2.5 mr-0.5 text-yellow-500" />
                             {target.routing_reason}
                           </p>

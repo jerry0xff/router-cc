@@ -288,10 +288,15 @@ export function SettingsPage({
                   className="space-y-6"
                 >
                   {(["claude", "codex", "gemini"] as const).map((appType) => (
-                    <div key={appType} className="rounded-xl glass-card overflow-hidden">
+                    <div
+                      key={appType}
+                      className="rounded-xl glass-card overflow-hidden"
+                    >
                       <div className="px-6 py-4 border-b border-border/50 flex items-center gap-3">
                         <Zap className="h-4 w-4 text-yellow-500" />
-                        <h3 className="text-base font-semibold capitalize">{appType}</h3>
+                        <h3 className="text-base font-semibold capitalize">
+                          {appType}
+                        </h3>
                       </div>
                       <div className="px-6 py-4">
                         <IntelligentRoutingPanel appType={appType} />

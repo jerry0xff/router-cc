@@ -91,7 +91,12 @@ import {
 } from "./hooks";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { useSettingsQuery } from "@/lib/query";
-import { RoutingConfigSection, fromMeta, toMeta, type RoutingConfig } from "./RoutingConfigSection";
+import {
+  RoutingConfigSection,
+  fromMeta,
+  toMeta,
+  type RoutingConfig,
+} from "./RoutingConfigSection";
 import {
   CLAUDE_DEFAULT_CONFIG,
   CODEX_DEFAULT_CONFIG,
@@ -201,8 +206,8 @@ export function ProviderForm({
   const [testConfig, setTestConfig] = useState<ProviderTestConfig>(
     () => initialData?.meta?.testConfig ?? { enabled: false },
   );
-  const [routingConfig, setRoutingConfig] = useState<RoutingConfig>(
-    () => fromMeta(initialData?.meta),
+  const [routingConfig, setRoutingConfig] = useState<RoutingConfig>(() =>
+    fromMeta(initialData?.meta),
   );
   const [pricingConfig, setPricingConfig] = useState<{
     enabled: boolean;
@@ -1214,7 +1219,7 @@ export function ProviderForm({
           ? true
           : undefined,
       routingConfig:
-        (appId === "claude" || appId === "codex" || appId === "gemini")
+        appId === "claude" || appId === "codex" || appId === "gemini"
           ? toMeta(routingConfig)
           : undefined,
     };
